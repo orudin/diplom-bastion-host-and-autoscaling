@@ -84,10 +84,6 @@ resource "aws_nat_gateway" "nats" {
   count = length(var.private_subnet)
 }
 
-
-output "subnets" {
-  value = aws_subnet.public[*]
-}
 #---------AWS SECURITY GROUP-----------
 
 resource "aws_security_group" "web_server2" {
@@ -138,6 +134,34 @@ resource "aws_security_group" "sql_bst" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+#--------------Aws Load Balancer-------------------------
+resource "aws_lb" "web" {
+  name = "test-lb-tf"
+  internal = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.web_server2.id]
+  subnets            = aws_subnet.public.*.id
+  enable_deletion_protection = false
+}
+
+resource "aws_lb_listener" "front_end" {
+  load_balancer_arn = aws_lb.web.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web_http.arn
+  }
+}
+
+resource "aws_lb_target_group" "web_http" {
+  name     = "tf-example-lb-tg"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.my_vpc.id
+}
+
 #--------------Aws Launch Configuration and Autoscaling Group-------------------------
 
 resource "aws_launch_configuration" "bositon" {
@@ -167,34 +191,6 @@ resource "aws_autoscaling_group" "bositon" {
     propagate_at_launch = true
   }
 
-}
-
-
-resource "aws_lb" "web" {
-  name = "test-lb-tf"
-  internal = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.web_server2.id]
-  subnets            = aws_subnet.public.*.id
-  enable_deletion_protection = false
-}
-
-resource "aws_lb_listener" "front_end" {
-  load_balancer_arn = aws_lb.web.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.web_http.arn
-  }
-}
-
-resource "aws_lb_target_group" "web_http" {
-  name     = "tf-example-lb-tg"
-  port     = 80
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.my_vpc.id
 }
 
 resource "aws_autoscaling_attachment" "web" {
@@ -268,6 +264,6 @@ resource "aws_instance" "database" {
   key_name = "aws_02"
 
   tags = {
-    Name = "database ${count.index + 1}"
+    Name = "database_private_subnet ${count.index + 1}"
     }
 }
